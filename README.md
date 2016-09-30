@@ -1,3 +1,3 @@
-"# shove-a-rover"
+# shove-a-rover
 
 TODO: Write this up
