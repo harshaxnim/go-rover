@@ -1,8 +1,26 @@
+
+// Global Variables /////////////////////////////////////////////////////////
+const int BUFFER_LENGTH = 20;
+const int TIMER_COUNT = 2;
+
+const int motorLP = 6;
+const int motorLN = 8;
+const int motorRP = 10;
+const int motorRN = 12;
+
 int vbose = 0;
 int endRead=0, bg=0, rd=0;
 char* msg;
 int updateInstruction=0, sendTemperature=0, sendHumidity=0, sendPressure=0;
 
+struct timer{
+  int status=0;
+  unsigned long time=0;
+}typedef timer;
+timer* timers;
+/////////////////////////////////////////////////////////////////////////////
+
+// ESP Control API //////////////////////////////////////////////////////////
 void s(String a){
   // Send
   Serial1.println(a);
@@ -10,7 +28,7 @@ void s(String a){
     Serial.print("\n_-_-_-_\n>>S: ");
     Serial.println(a);
   }
-  delay(100);
+  delay(100); // XXX
 }
 
 void r(){
@@ -28,7 +46,7 @@ void r(){
       if(vbose) Serial.write(c);
       msg[rd-1]=c;
       rd++;
-      if(rd>=21) Serial.println("Buffer limited to 20. Update the code if necessary.");
+      if( rd>=BUFFER_LENGTH ) Serial.println("Buffer limited to 20. Update the code if necessary.");
     }
     else if(c=='+'){
       if(vbose) Serial.println("+");
@@ -48,10 +66,75 @@ void sendMessage(String c){
   s(header+l);
   s(c);
 }
+/////////////////////////////////////////////////////////////////////////////
+
+// Motor Control Code ///////////////////////////////////////////////////////
+void forward(){
+  // Left and Right motor forward
+  digitalWrite(motorLP, HIGH);
+  digitalWrite(motorLN, LOW);
+  digitalWrite(motorRP, HIGH);
+  digitalWrite(motorRN, LOW);
+}
+void backward(){
+  // Left and Right motor backward
+  digitalWrite(motorLP, LOW);
+  digitalWrite(motorLN, HIGH);
+  digitalWrite(motorRP, LOW);
+  digitalWrite(motorRN, HIGH);
+}
+void left(){
+  // Left motor backward
+  digitalWrite(motorLP, LOW);
+  digitalWrite(motorLN, HIGH);
+  // Right motor forward
+  digitalWrite(motorRP, HIGH);
+  digitalWrite(motorRN, LOW);
+}
+void right(){
+  // Left motor forward
+  digitalWrite(motorLP, HIGH);
+  digitalWrite(motorLN, LOW);
+  // Right motor backward
+  digitalWrite(motorRP, LOW);
+  digitalWrite(motorRN, HIGH);
+}
+void stop(){
+  // All low
+  digitalWrite(motorLP, LOW);
+  digitalWrite(motorLN, LOW);
+  digitalWrite(motorRP, LOW);
+  digitalWrite(motorRN, LOW);
+}
+/////////////////////////////////////////////////////////////////////////////
+
+// Brains here //////////////////////////////////////////////////////////////
+void handleTimers(){
+  for (int i=0; i<TIMER_COUNT; i++){
+    unsigned long current = millis();
+    if( current > timers[i].time ){ // alarm
+      stop();
+    }
+  }
+}
 
 void respond(){
   if(updateInstruction){
-    //do something
+    if(msg[1] == 'r'){
+      right();
+      timers[0].status = 1;
+      timers[0].time = millis();
+    }
+    else if(msg[1] == 'l'){
+      left();
+    }
+    else if(msg[1] == 'f'){
+      forward();
+    }
+    else if(msg[1] == 'b'){
+      backward();
+    }
+    
     updateInstruction = 0;
   }
   else if(sendTemperature){
@@ -96,7 +179,9 @@ void analyse(){
   rd = 0;
   endRead = 0;
 }
+/////////////////////////////////////////////////////////////////////////////
 
+// Arduino Setup and Loop ///////////////////////////////////////////////////
 void setup() {
   delay(100);
   Serial.begin (115200);
@@ -104,7 +189,8 @@ void setup() {
   delay(100);
   
   Serial.println("Initialising variables..");
-  msg = (char*)malloc(21);
+  msg = (char*)malloc(BUFFER_LENGTH*sizeof(char));
+  timers = (timer*)malloc(TIMER_COUNT*sizeof(timer));
   delay(100);
   
   s("AT+CIPMUX=1"); // Enabling up MUX
@@ -118,4 +204,6 @@ void loop() {
     analyse();
     respond();
   }
+  handleTimers();
 }
+/////////////////////////////////////////////////////////////////////////////
